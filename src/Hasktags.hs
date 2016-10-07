@@ -43,13 +43,11 @@ import System.Directory
     ( getModificationTime,
       getDirectoryContents,
       doesFileExist,
-      doesDirectoryExist )
+      doesDirectoryExist,
+      isSymbolicLink )
 import Text.JSON.Generic ( encodeJSON, decodeJSON )
 import Control.Monad ( when )
 import DebugShow ( trace_ )
-#ifdef VERSION_unix
-import System.Posix.Files ( isSymbolicLink, getSymbolicLinkStatus )
-#endif
 import System.FilePath ( (</>) )
 
 -- search for definitions of things
@@ -503,12 +501,7 @@ dirToFiles :: Bool -> [String] -> FilePath -> IO [ FilePath ]
 dirToFiles _ _ "STDIN" = fmap lines $ hGetContents stdin
 dirToFiles followSyms suffixes p = do
   isD <- doesDirectoryExist p
-  isSymLink <-
-#ifdef VERSION_unix
-    isSymbolicLink `fmap` getSymbolicLinkStatus p
-#else
-    return False
-#endif
+  isSymLink <- isSymbolicLink p
   case isD of
     False -> return $ if matchingSuffix then [p] else []
     True ->
