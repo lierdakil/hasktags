@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 -- should this be named Data.Hasktags or such?
 module Hasktags (
   FileData,
@@ -42,7 +43,12 @@ import System.Directory
       getDirectoryContents,
       doesFileExist,
       doesDirectoryExist,
-      isSymbolicLink )
+#if MIN_VERSION_directory(1,3,0)
+      pathIsSymbolicLink
+#else
+      isSymbolicLink
+#endif
+      )
 import Text.JSON.Generic ( encodeJSON, decodeJSON )
 import Control.Monad ( when )
 import DebugShow ( trace_ )
@@ -498,7 +504,12 @@ dirToFiles :: Bool -> [String] -> FilePath -> IO [ FilePath ]
 dirToFiles _ _ "STDIN" = fmap lines $ hGetContents stdin
 dirToFiles followSyms suffixes p = do
   isD <- doesDirectoryExist p
-  isSymLink <- isSymbolicLink p
+  isSymLink <-
+#if MIN_VERSION_directory(1,3,0)
+      pathIsSymbolicLink p
+#else
+      isSymbolicLink p
+#endif
   case isD of
     False -> return $ if matchingSuffix then [p] else []
     True ->
