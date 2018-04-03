@@ -6,7 +6,7 @@ EXTERNS=$(shell find nodejs-externs/ -maxdepth 1 -name '*.js' | sed 's/^/--exter
 
 all: npm/$(NAME).js
 
-$(ROOT): src $(NAME).cabal default.nix
+$(ROOT)/all.js: src $(NAME).cabal default.nix
 	nix build
 
 npm/$(NAME).js: $(ROOT)/all.js $(ROOT)/all.js.externs
