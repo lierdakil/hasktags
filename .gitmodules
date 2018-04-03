@@ -1,0 +1,3 @@
+[submodule "nodejs-externs"]
+	path = nodejs-externs
+	url = git@github.com:atom-haskell/node.js-closure-compiler-externs.git
