@@ -12,3 +12,7 @@ tags
 ctags
 result
 npm/hasktags.js
+dist-newstyle/
+.ghc.environment*
+.styx
+cabal.sandbox.config

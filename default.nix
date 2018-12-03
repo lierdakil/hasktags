@@ -1,24 +1,30 @@
-{ nixpkgs ? import <nixpkgs> {}, compiler ? "ghcjsHEAD", doBenchmark ? false }:
+{ nixpkgs ? import <nixpkgs> {}, compiler ? "ghcjs", doBenchmark ? false }:
 
 let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, base, bytestring, directory, filepath, HUnit
-      , json, stdenv, utf8-string
+  f = { mkDerivation, base, bytestring, containers, directory
+      , filepath, HUnit, json, microlens-platform, optparse-applicative
+      , stdenv, utf8-string
       }:
       mkDerivation {
         pname = "hasktags";
-        version = "0.69.5";
+        version = "0.71.2";
         src = ./.;
+        configureFlags = [ "-fembed-data-files" ];
         isLibrary = true;
         isExecutable = true;
         libraryHaskellDepends = [
-          base bytestring directory filepath json utf8-string
+          base bytestring directory filepath json microlens-platform
+          utf8-string
         ];
-        executableHaskellDepends = [ base directory filepath ];
+        executableHaskellDepends = [
+          base containers directory filepath optparse-applicative
+        ];
         testHaskellDepends = [
-          base bytestring directory filepath HUnit json utf8-string
+          base bytestring directory filepath HUnit json microlens-platform
+          utf8-string
         ];
         homepage = "http://github.com/MarcWeber/hasktags";
         description = "Produces ctags \"tags\" and etags \"TAGS\" files for Haskell programs";

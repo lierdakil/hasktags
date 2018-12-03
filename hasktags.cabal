@@ -1,5 +1,5 @@
 Name: hasktags
-Version: 0.69.5
+Version: 0.71.2
 Copyright: The University Court of the University of Glasgow
 License: BSD3
 License-File: LICENSE
@@ -23,7 +23,6 @@ extra-source-files:
   testcases/Repair.lhs
   testcases/blockcomment.hs
   testcases/constructor.hs
-  testcases/firstconstructor.hs
   testcases/module.hs
   testcases/space.hs
   testcases/substring.hs
@@ -43,6 +42,9 @@ extra-source-files:
   testcases/testcase11.hs
   testcases/simple.hs
   testcases/monad-base-control.hs
+  testcases/16-regression.hs
+  testcases/9.hs
+  testcases/9-too.hs
 
 Flag debug
   Default: False
@@ -64,7 +66,8 @@ library
     bytestring >= 0.9 && < 0.11,
     directory >= 1.2.6 && < 1.4,
     filepath,
-    json >= 0.5 && < 0.10
+    json >= 0.5 && < 0.10,
+    microlens-platform >= 0.3.8.0 && < 0.4
 
 Executable hasktags
     Main-Is: src/Main.hs
@@ -72,7 +75,10 @@ Executable hasktags
       base,
       directory,
       filepath,
-      hasktags
+      hasktags,
+      optparse-applicative,
+      containers
+    other-modules: Paths_hasktags
     ghc-options: -Wall
     default-language: Haskell2010
 
@@ -90,7 +96,8 @@ Test-Suite testsuite
                 directory,
                 filepath,
                 json,
-                HUnit
+                HUnit,
+                microlens-platform
   other-modules: Tags, Hasktags, DebugShow
   ghc-options: -Wall
   default-language: Haskell2010

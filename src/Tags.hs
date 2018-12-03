@@ -1,13 +1,15 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell    #-}
 -- everyting tagfile related ..
 -- this should be moved into its own library (after cleaning up most of it ..)
 -- yes, this is still specific to hasktags :(
 module Tags where
-import Data.Char ( isSpace )
-import Data.List ( sortBy )
-import Data.Data ( Data, Typeable )
-import System.IO ( Handle, hPutStrLn, hPutStr )
-import Control.Monad ( when )
+import           Control.Monad       (when)
+import           Data.Char           (isSpace)
+import           Data.Data           (Data, Typeable)
+import           Data.List           (sortBy, intercalate)
+import           Lens.Micro.Platform
+import           System.IO           (Handle, hPutStr, hPutStrLn)
 
 -- my words is mainly copied from Data.List.
 -- difference abc::def is recognized as three words
@@ -49,44 +51,62 @@ type FileName = String
 
 type ThingName = String
 
+type Scope = Maybe (FoundThingType, String)
+
 -- The position of a token or definition
-data Pos = Pos
-                FileName -- file name
-                Int      -- line number
-                Int      -- token number
-                String   -- string that makes up that line
+data Pos = Pos { _fileName    :: FileName -- file name
+               , _lineNumber  :: Int      -- line number
+               , _tokenNumber :: Int      -- token number
+               , _lineContent :: String   -- string that makes up that line
+               }
    deriving (Show,Eq,Typeable,Data)
 
 -- A definition we have found
 -- I'm not sure wether I've used the right names.. but I hope you fix it / get
 -- what I mean
 data FoundThingType
-  = FTFuncTypeDef
-    | FTFuncImpl
+  = FTFuncTypeDef String Scope
+    | FTFuncImpl Scope
     | FTType
     | FTData
     | FTDataGADT
     | FTNewtype
     | FTClass
+    | FTInstance
     | FTModule
-    | FTCons
+    | FTCons FoundThingType String
     | FTOther
-    | FTConsAccessor
-    | FTConsGADT
+    | FTConsAccessor FoundThingType String String
+    | FTConsGADT String
+    | FTPatternTypeDef String
+    | FTPattern
   deriving (Eq,Typeable,Data)
 
 instance Show FoundThingType where
-  show FTFuncTypeDef = "ft"
-  show FTFuncImpl = "fi"
+  show (FTFuncTypeDef s (Just (FTClass, p))) =
+      "ft\t" ++ "signature:(" ++ s ++ ")\t" ++ "class:" ++ p
+  show (FTFuncTypeDef s (Just (FTInstance, p))) =
+      "ft\t" ++ "signature:(" ++ s ++ ")\t" ++ "instance:" ++ p
+  show (FTFuncTypeDef s _) = "ft\t" ++ "signature:(" ++ s ++ ")"
+  show (FTFuncImpl (Just (FTClass, p)))= "fi\t" ++ "class:" ++ p
+  show (FTFuncImpl (Just (FTInstance, p)))= "fi\t" ++ "instance:" ++ p
+  show (FTFuncImpl _)= "fi"
   show FTType = "t"
   show FTData = "d"
   show FTDataGADT = "d_gadt"
   show FTNewtype = "nt"
   show FTClass = "c"
+  show FTInstance = "i"
   show FTModule = "m"
-  show FTCons = "cons"
-  show FTConsGADT = "c_gadt"
-  show FTConsAccessor = "c_a"
+  show (FTCons FTData p) = "cons\t" ++ "data:" ++ p
+  show (FTCons FTNewtype p) = "cons\t" ++ "newtype:" ++ p
+  show FTCons {} = "cons"
+  show (FTConsGADT p) = "c_gadt\t" ++ "d_gadt:" ++ p
+  show (FTConsAccessor FTData p c) = "c_a\t" ++ "cons:" ++ p ++ "." ++ c
+  show (FTConsAccessor FTNewtype p c) = "c_a\t" ++ "cons:" ++ p ++ "." ++ c
+  show FTConsAccessor {} = "c_a"
+  show (FTPatternTypeDef s) = "pt\t" ++ "signature:(" ++ s ++ ")"
+  show FTPattern = "pi"
   show FTOther = "o"
 
 data FoundThing = FoundThing FoundThingType ThingName Pos
@@ -96,30 +116,39 @@ data FoundThing = FoundThing FoundThingType ThingName Pos
 data FileData = FileData FileName [FoundThing]
   deriving (Typeable,Data,Show)
 
+makeLenses ''Pos
+
 getfoundthings :: FileData -> [FoundThing]
 getfoundthings (FileData _ things) = things
 
 ctagEncode :: Char -> String
-ctagEncode '/' = "\\/"
+ctagEncode '/'  = "\\/"
 ctagEncode '\\' = "\\\\"
-ctagEncode a = [a]
+ctagEncode a    = [a]
+
+
+showLine :: Pos -> String
+showLine = show . view lineNumber . over lineNumber (+1)
+
+normalDump :: FoundThing -> String
+normalDump (FoundThing _ n p) = intercalate "\t" [n, p^.fileName, showLine p]
+
+extendedDump :: FoundThing -> String
+extendedDump (FoundThing t n p) = intercalate "\t" [n, p^.fileName, content, kindInfo, lineInfo, "language:Haskell"]
+  where content = "/^" ++ concatMap ctagEncode (p^.lineContent) ++ "$/;\""
+        kindInfo = show t
+        lineInfo = "line:" ++ showLine p
 
 -- | Dump found tag in normal or extended (read : vim like) ctag
 -- line
-dumpthing :: Bool -> FoundThing -> String
-dumpthing False (FoundThing _ name (Pos filename line _ _)) =
-    name ++ "\t" ++ filename ++ "\t" ++ show (line + 1)
-dumpthing True (FoundThing kind name (Pos filename line _ lineText)) =
-    name ++ "\t" ++ filename
-         ++ "\t/^" ++ concatMap ctagEncode lineText
-         ++ "$/;\"\t" ++ show kind
-         ++ "\tline:" ++ show (line + 1)
-         ++ "\tlanguage:Haskell"
-
+dumpThing :: Bool -> FoundThing -> String
+dumpThing cond thing = if cond
+                          then extendedDump thing
+                          else normalDump thing
 
 -- stuff for dealing with ctags output format
-writectagsfile :: Handle -> Bool -> [FileData] -> IO ()
-writectagsfile ctagsfile extended filedata = do
+writectagsfile :: Bool -> [FileData] -> Handle -> IO ()
+writectagsfile extended filedata ctagsfile = do
     let things = concatMap getfoundthings filedata
     when extended
          (do hPutStrLn
@@ -130,7 +159,7 @@ writectagsfile ctagsfile extended filedata = do
                ctagsfile
                "!_TAG_FILE_SORTED\t1\t/0=unsorted, 1=sorted, 2=foldcase/"
              hPutStrLn ctagsfile "!_TAG_PROGRAM_NAME\thasktags")
-    mapM_ (hPutStrLn ctagsfile . dumpthing extended) (sortThings things)
+    mapM_ (hPutStrLn ctagsfile . dumpThing extended) (sortThings things)
 
 sortThings :: [FoundThing] -> [FoundThing]
 sortThings = sortBy comp
@@ -142,8 +171,8 @@ sortThings = sortBy comp
 
 -- stuff for dealing with etags output format
 
-writeetagsfile :: Handle -> [FileData] -> IO ()
-writeetagsfile etagsfile = mapM_ (hPutStr etagsfile . etagsDumpFileData)
+writeetagsfile :: [FileData] -> Handle -> IO ()
+writeetagsfile fileData etagsfile = mapM_ (hPutStr etagsfile . etagsDumpFileData) fileData
 
 etagsDumpFileData :: FileData -> String
 etagsDumpFileData (FileData filename things) =
@@ -152,9 +181,9 @@ etagsDumpFileData (FileData filename things) =
           thingslength = length thingsdump
 
 etagsDumpThing :: FoundThing -> String
-etagsDumpThing (FoundThing _ name (Pos _filename line token fullline)) =
-  let wrds = mywords True fullline
-  in concat (take token wrds ++ map (take 1) (take 1 $ drop token wrds))
-        ++ "\x7f"
-        ++ name ++ "\x01"
-        ++ show line ++ "," ++ show (line + 1) ++ "\n"
+etagsDumpThing (FoundThing _ name pos) =
+  let line = pos^.lineNumber
+      token = pos^.tokenNumber
+      toks = mywords True (pos^.lineContent)
+      lineIdentifier = concat (take token toks ++ map (take 1) (take 1 $ drop token toks))
+  in concat [lineIdentifier, "\x7f", name, "\x01", show line, ",", show (line + 1), "\n"]
