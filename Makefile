@@ -7,9 +7,9 @@ EXTERNS=$(shell find nodejs-externs/ -maxdepth 1 -name '*.js' | sed 's/^/--exter
 all: npm/$(NAME).js
 
 $(ROOT)/all.js: src $(NAME).cabal default.nix
-	nix build
+	echo run nix build manually if needed
 
-npm/$(NAME).js: $(ROOT)/all.js $(ROOT)/all.js.externs
+npm/$(NAME).js: $(ROOT)/all.js $(ROOT)/all.js.externs src $(NAME).cabal default.nix
 	closure-compiler $(ROOT)/all.js --compilation_level=ADVANCED_OPTIMIZATIONS $(EXTERNS) --externs=$(ROOT)/all.js.externs > npm/$(NAME).js
 
 .PHONY: clean
